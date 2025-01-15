@@ -1,6 +1,7 @@
 import os
 import discord
 from dotenv import load_dotenv
+from discord.ext import commands
 from bot import bot
 
 # 테스트 할때 사용
@@ -13,9 +14,19 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 async def start_banpick(ctx):
     await ctx.send('밴픽을 시작합니다.')
 
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
+    
+
+# 명령어 에러 처리
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        pass
+    else:
+        print(f"Unhandled error: {error}")
 
 
 def main() -> None:

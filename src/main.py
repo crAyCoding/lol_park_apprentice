@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from discord.ext import commands
 from bot import bot
 
-from banpick import choose_blue_red
+from banpick import *
 
 # 테스트 할때 사용
 load_dotenv()
@@ -15,8 +15,12 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 @bot.command(name='밴픽')
 async def start_banpick(ctx):
     await ctx.send('밴픽을 시작합니다.')
-    # 1. 현재 채널에서 진행되는 내전 있는지 확인
-    # 있다면 2번으로, 없다면 에러 처리
+    # 0. 현재 채널에서 진행되는 내전 있는지 확인 (없다면 에러 처리)
+    # 0-1. 밴픽 내용 기록할 dict 생성
+    full_game_info = make_new_full_game_info(ctx)
+    # 1. 밴픽 진행 / 내전 종료 선택 (되물어보기)
+    is_banpick = await generate_new_banpick(ctx, full_game_info)
+    full_game_info["games"].append(make_new_game_info(full_game_info))
     # 2. 블루팀, 레드팀 선택
     await choose_blue_red(ctx, {}, 1, 'baron')
     # 3. 라인 선택 (2번째 게임부터는 이전 게임과 동일 버튼 추가)
@@ -26,7 +30,6 @@ async def start_banpick(ctx):
     # 7. 밴픽 수정사항 있는지 확인. 있다면 수정 (되물어보기)
     # 8. 각 픽에 대해 어떤 서버원이 플레이하는지 선택 (되물어보기)
     # 9. 게임 결과 입력하는 View 띄우기 (되물어보기)
-    # 10. 게임 결과 입력 후 다음 게임 진행 / 내전 종료 선택 (되물어보기)
 
 
 @bot.event

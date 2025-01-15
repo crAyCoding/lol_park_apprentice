@@ -4,7 +4,8 @@ from banpick_class import Team, TeamPick
 # 내전 전체 밴픽 Dict 생성
 def make_new_full_game_info(ctx):
     full_game_info = {
-        "channel": ctx.id,
+        "channel": ctx.channel.id,
+        "host": None,
         "summoners": [],
         "team_baron": Team('baron', None, []).to_dict(),
         "team_elder": Team('elder', None, []).to_dict(),
@@ -29,6 +30,75 @@ def make_new_game_info(full_game_info):
         "winner": None,
         "loser": None,
     }
+    return game_info
+
+
+# 1. 밴픽 진행 / 내전 종료 선택 (되물어보기)
+async def generate_new_banpick(ctx, full_game_info: dict):
+
+    # 새 밴픽 진행 여부 view
+    generate_banpick_view = discord.ui.View()
+    check_new_banpick_view = discord.ui.View()
+    
+    # 새 밴픽 진행 여부 변수
+    is_new_banpick = True
+
+    # 첫번째 버튼 콜백
+    async def first_button_callback(interaction: discord.Interaction):
+        is_new_banpick = True if interaction.data['custom_id'] == 'generate' else False
+        await interaction.message.delete()
+        await ctx.send(content=f'## {"새로운 게임 밴픽을 시작하시겠습니까?" if is_new_banpick else "내전을 종료하시겠습니까?"}', view=check_new_banpick_view)
+
+    # 두번째 버튼 콜백
+    async def second_button_callback(interaction: discord.Interaction):
+        result = True if interaction.data['custom_id'] == 'yes' else False
+        await interaction.message.delete()
+        if result:
+            if is_new_banpick:
+                print("HI")
+            else:
+                print('hi')
+        else:
+            await ctx.send(content=f"## 버튼을 선택해주세요.", view=generate_banpick_view)
+    
+    # 밴픽 진행 버튼
+    generate_button = discord.ui.Button(
+        label="밴픽 진행",
+        style=discord.ButtonStyle.primary,
+        custom_id="generate",
+    )
+    generate_button.callback = first_button_callback
+    generate_banpick_view.add_item(generate_button)
+
+    # 내전 종료 버튼
+    end_button = discord.ui.Button(
+        label="내전 종료",
+        style=discord.ButtonStyle.green,
+        custom_id="end",
+    )
+    end_button.callback = first_button_callback
+    generate_banpick_view.add_item(end_button)
+    
+    # 그렇다 버튼
+    yes_button = discord.ui.Button(
+        label="그렇다",
+        style=discord.ButtonStyle.primary,
+        custom_id="yes",
+    )
+    yes_button.callback = second_button_callback
+    check_new_banpick_view.add_item(yes_button)
+
+    # 아니다 버튼
+    no_button = discord.ui.Button(
+        label="아니다",
+        style=discord.ButtonStyle.danger,
+        custom_id="no",
+    )
+    no_button.callback = second_button_callback
+    check_new_banpick_view.add_item(no_button)
+
+    await ctx.send(content=f"## 버튼을 선택해주세요.", view=generate_banpick_view)
+
 
 
 # 2. 블루팀, 레드팀 선택
@@ -67,3 +137,13 @@ async def choose_blue_red(ctx, full_game_info: dict, game_number: int, choose_te
     team_choose_view.add_item(red_button)
 
     await ctx.send(content=f"## {leader.display_name}님, 진영을 선택해주세요.", view=team_choose_view)
+
+
+# 3. 라인 선택 (2번째 게임부터는 이전 게임과 동일 버튼 추가)
+async def choose_line(ctx, full_game_info: dict):
+    
+    # 첫번째 게임인지 여부
+    is_first_game = True
+    
+    if len(full_game_info["games"]) > 1:
+        is_first_game = False

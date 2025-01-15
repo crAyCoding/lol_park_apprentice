@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 from discord.ext import commands
 from bot import bot
 
+from banpick import choose_blue_red
+
 # 테스트 할때 사용
 load_dotenv()
 # GitHub Secrets에서 가져오는 값
@@ -16,6 +18,7 @@ async def start_banpick(ctx):
     # 1. 현재 채널에서 진행되는 내전 있는지 확인
     # 있다면 2번으로, 없다면 에러 처리
     # 2. 블루팀, 레드팀 선택
+    await choose_blue_red(ctx, {}, 1, 'baron')
     # 3. 라인 선택 (2번째 게임부터는 이전 게임과 동일 버튼 추가)
     # 4. 밴픽을 진행할 서버원 정하기 (직접 누르는 방식)
     # 5. 챔피언 풀 보여주는 View 띄우고, 1밴부터 3밴까지 블루 - 레드 차례대로 진행

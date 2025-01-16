@@ -20,9 +20,7 @@ async def start_banpick(ctx):
     full_game_info = make_new_full_game_info(ctx)
     # 1. 밴픽 진행 / 내전 종료 선택 (되물어보기)
     is_banpick = await generate_new_banpick(ctx, full_game_info)
-    full_game_info["games"].append(make_new_game_info(full_game_info))
     # 2. 블루팀, 레드팀 선택
-    await choose_blue_red(ctx, {}, 1, 'baron')
     # 3. 라인 선택 (2번째 게임부터는 이전 게임과 동일 버튼 추가)
     # 4. 밴픽을 진행할 서버원 정하기 (직접 누르는 방식)
     # 5. 챔피언 풀 보여주는 View 띄우고, 1밴부터 3밴까지 블루 - 레드 차례대로 진행

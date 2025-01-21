@@ -1,14 +1,12 @@
 class Team:
-    def __init__(self, name, leader, members):
+    def __init__(self, name, members):
         self.name = name
-        self.leader = leader
         self.members = members
         self.avg_tier = get_average_tier(members)
     
     def to_dict(self):
         return {
             "name": self.name,
-            "leader": self.leader,
             "members": self.members,
             "avg_tier": self.avg_tier,
         }

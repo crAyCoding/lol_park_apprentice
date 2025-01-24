@@ -13,6 +13,7 @@ def make_new_full_game_info(ctx):
         "leader": {"baron": None, "elder": None}, # 팀장
         "games": [], # 각 내전 게임들 담은 list
         "resume": True, # 밴픽 진행 여부
+        "game_id": None,
     }
     return full_game_info
 
@@ -53,12 +54,22 @@ async def generate_new_banpick(ctx, full_game_info: dict):
 
     # 첫번째 버튼 콜백
     async def first_button_callback(interaction: discord.Interaction):
+        if interaction.user != full_game_info["host"]:
+            await interaction.response.send_message(
+                content='내전 연 사람만 누를 수 있습니다.',
+                ephemeral=True  # 이 옵션으로 메시지를 요청한 사용자에게만 보이게 설정
+            )
         full_game_info["resume"] = True if interaction.data['custom_id'] == 'generate' else False
         await interaction.message.delete()
         await ctx.send(content=f'## {"새 밴픽을 시작하시겠습니까?" if full_game_info["resume"] else "내전을 종료하시겠습니까?"}', view=check_new_banpick_view)
 
     # 두번째 버튼 콜백
     async def second_button_callback(interaction: discord.Interaction):
+        if interaction.user != full_game_info["host"]:
+            await interaction.response.send_message(
+                content='내전 연 사람만 누를 수 있습니다.',
+                ephemeral=True  # 이 옵션으로 메시지를 요청한 사용자에게만 보이게 설정
+            )
         result = True if interaction.data['custom_id'] == 'yes' else False
         await interaction.message.delete()
         if result:
@@ -125,20 +136,27 @@ async def choose_blue_red(ctx, full_game_info: dict):
     
     present_game = full_game_info["games"][game_number - 1]
     
-    # leader = full_game_info["leader"][choose_team]
-    leader = ctx.author
+    leader = full_game_info["leader"][choose_team]
 
     # View를 인라인으로 정의
     team_choose_view = discord.ui.View()
 
     # 버튼 핸들러 정의
-    async def button_callback(interaction: discord.Interaction):
-        team = interaction.data['custom_id']
-        await interaction.message.delete()
-        target_team, other_team = ("blue", "red") if team == "블루" else ("red", "blue")
-        present_game[target_team] = choose_team
-        present_game[other_team] = "baron" if choose_team == "elder" else "elder"
-        await interaction.channel.send(f'{get_nickname(leader.display_name)}님께서 {team}를 선택하셨습니다.')
+    def create_button_callback(leader):
+        async def button_callback(interaction: discord.Interaction):
+            team = interaction.data['custom_id']
+            if interaction.user != leader:
+                await interaction.response.send_message(
+                    content=f'{get_nickname(leader)}님만 누를 수 있습니다.',
+                    ephemeral=True  # 이 옵션으로 메시지를 요청한 사용자에게만 보이게 설정
+                )
+            await interaction.message.delete()
+            target_team, other_team = ("blue", "red") if team == "블루" else ("red", "blue")
+            present_game[target_team] = choose_team
+            present_game[other_team] = "baron" if choose_team == "elder" else "elder"
+            await interaction.channel.send(f'{get_nickname(leader)}님께서 {team}를 선택하셨습니다.')
+            await choose_line(ctx, full_game_info, present_game, game_number)
+        return button_callback
 
     # 블루팀 버튼 추가
     blue_button = discord.ui.Button(
@@ -146,7 +164,7 @@ async def choose_blue_red(ctx, full_game_info: dict):
         style=discord.ButtonStyle.primary,
         custom_id="블루",
     )
-    blue_button.callback = button_callback
+    blue_button.callback = create_button_callback(leader)
     team_choose_view.add_item(blue_button)
 
     # 레드팀 버튼 추가
@@ -155,10 +173,10 @@ async def choose_blue_red(ctx, full_game_info: dict):
         style=discord.ButtonStyle.danger,
         custom_id="레드"
     )
-    red_button.callback = button_callback
+    red_button.callback = create_button_callback(leader)
     team_choose_view.add_item(red_button)
 
-    await ctx.send(content=f"## {get_nickname(leader.display_name)}님, 진영을 선택해주세요.", view=team_choose_view)
+    await ctx.send(content=f"## {get_nickname(leader)}님, 진영을 선택해주세요.", view=team_choose_view)
 
 
 # 3. 라인 선택 (2번째 게임부터는 이전 게임과 동일 버튼 추가)
@@ -170,7 +188,6 @@ async def choose_line(ctx, full_game_info: dict, present_game: dict, game_number
     baron_line = []
     elder_line = []
     positions = ["top", "jungle", "mid", "bot", "support"]
-    kor_positions = ["탑", "정글", "미드", "원딜", "서폿"]
 
     if is_not_first_game:
         prev_game = full_game_info["games"][game_number - 2]
@@ -182,23 +199,83 @@ async def choose_line(ctx, full_game_info: dict, present_game: dict, game_number
         elder_line = full_game_info["elder"]["members"]
 
     class LineChooseView(discord.ui.View):
-        def __init__(self, baron_line, elder_line):
-            super().__init__(timeout=900)
-            for number, member in enumerate(baron_line):
-                self.add_item(LineButton(self, kor_positions[number], baron_line, number))
+        def __init__(self, line_members, team):
+            super().__init__(timeout=3600)
+            self.lines = ['탑', '정글', '미드', '원딜', '서폿']
+            self.line_members = line_members
+            self.answers = {line: member.display_name for line, member in zip(self.lines, line_members)}
 
+            for idx, line in enumerate(self.lines):
+                self.add_item(self.create_select(line, line_members[idx], team))
+            
 
-    class LineButton(discord.ui.Button):
-        def __init__(self, view, kor_pos, members, number):
-            super().__init__(label=f'{kor_pos} : {get_nickname(members[number].display_name)}')
-            self.kor_pos = kor_pos
-            self.number = number
-            self.members = members
-            self.view = view
+        def create_select(self, line, member, team):
+            async def callback(interaction: discord.Interaction):
+                press_user = interaction.user
+                if press_user not in full_game_info[team]['members']:
+                    await interaction.response.edit_message(view=self)
+                    return
+                selected_value = interaction.data["values"][0]
+                # 임시로 custom_id 초기화 (중복 방지)
+                prev_custom_id = select.custom_id
+                select.custom_id = '' 
+                # 다른 Select 옵션 및 placeholder 업데이트
+                for child in self.children:
+                    if isinstance(child, discord.ui.Select) and child != select:
+                        child_line = child.placeholder.split(":")[0].strip()
+                        if child.custom_id == selected_value:
+                            child.custom_id = prev_custom_id
+                            for origin_line in self.answers.keys():
+                                if origin_line == child_line:
+                                    self.answers[child_line] = prev_custom_id
+                        child.placeholder = f'{child_line} : {child.custom_id}'
+                        child.options=[discord.SelectOption(label=line_member.display_name) for line_member in self.line_members if line_member != child.custom_id]
+                self.answers[line] = selected_value
+                select.custom_id = selected_value
+                select.placeholder = f"{line} : {selected_value}"
+                select.options = [discord.SelectOption(label=line_member.display_name) for line_member in self.line_members if line_member != selected_value]
+                await interaction.response.edit_message(view=self)
+
+            select = discord.ui.Select(
+                custom_id=member.display_name,
+                placeholder=f"{line} : {member.display_name}",
+                options=[discord.SelectOption(label=line_member.display_name) for line_member in self.line_members if line_member != member],
+                min_values=1,
+                max_values=1
+            )
+            select.callback = callback
+            return select
         
-        async def callback(self, interaction: discord.Interaction):
-            self.number = self.number + 1 if self.number < 4 else 0
-            self.label = f'{self.kor_pos} : {get_nickname(self.members[self.number].display_name)}'
-    
+    class ConfirmView(discord.ui.View):
+        def __init__(self, baron_answers, elder_answers):
+            super().__init__(timeout=3600)
+            self.baron = baron_answers
+            self.elder = elder_answers
 
-    
+            self.add_item(self.create_confirm_button('baron'))
+            self.add_item(self.create_confirm_button('elder'))
+        
+        def create_confirm_button(self, team):
+            async def callback(interaction: discord.Interaction):
+                press_user = interaction.user
+                if press_user not in full_game_info[team]['members']:
+                    await interaction.response.defer()
+                    return 
+                self.remove_item(button)
+                if len(self.children) == 0:
+                    await interaction.message.delete()
+                    print("HI")
+                await interaction.response.edit_message(view=self)
+
+            button = discord.ui.Button(label=f"{'바론' if team == 'baron' else '장로'}팀 확정", style=discord.ButtonStyle.success)
+            button.callback = callback
+            return button
+        
+    baron_view = LineChooseView(baron_line, 'baron')
+    elder_view = LineChooseView(elder_line, 'elder')
+    await ctx.send("## 바론팀 라인을 골라주세요.", view=baron_view)
+    await ctx.send("## 장로팀 라인을 골라주세요.", view=elder_view)
+
+    # 결과 확인 버튼을 별도의 View로 추가
+    confirm_view = ConfirmView(baron_view.answers, elder_view.answers)
+    await ctx.send("확정 버튼을 눌러 선택을 완료하세요:", view=confirm_view)

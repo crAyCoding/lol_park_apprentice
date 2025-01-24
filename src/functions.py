@@ -1,6 +1,6 @@
 # display_name으로부터 `닉네임#태그` 가져오기
-def get_nickname(display_name: str):
-    return display_name.split('/')[0].strip()
+def get_nickname(member):
+    return member.display_name.split('/')[0].strip()
 
 
 # 팀 평균 티어 계산하기

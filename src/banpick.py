@@ -293,19 +293,24 @@ async def choose_line(ctx, full_game_info: dict, present_game: dict, game_number
 # 4. 밴픽 진행할 인원 선정
 async def choose_who_banpick(ctx, full_game_info, present_game, game_number, baron_line, elder_line):
     def get_line_confirm_message():
+        def format_team(team_name, team_data):
+            team_header = f'🟦 블루팀 (팀 {"바론" if present_game[team_name] == "baron" else "장로"})' if team_name == "blue" else \
+                        f'🟥 레드팀 (팀 {"바론" if present_game[team_name] == "baron" else "장로"})'
+            team_lines = '\n'.join([f'{line} : {member}' for line, member in team_data.items()])
+            return f'{team_header}\n\n{team_lines}\n'
+
         blue_team = baron_line if present_game["blue"] == 'baron' else elder_line
         red_team = baron_line if present_game["red"] == 'baron' else elder_line
-        confirm_message = f'```\n'
-        confirm_message += f'GAME {game_number}\n\n'
-        confirm_message += f'🟦 블루팀 (팀 {"바론" if present_game["blue"] == "baron" else "장로"})\n\n'
-        for line, member in blue_team.items():
-            confirm_message += f'{line} : {member}\n'
-        confirm_message += f'\n'
-        confirm_message += f'🟥 레드팀 (팀 {"바론" if present_game["red"] == "baron" else "장로"})\n\n'
-        for line, member in red_team.items():
-            confirm_message += f'{line} : {member}\n'
-        confirm_message += f'```'
+
+        confirm_message = (
+            f'```\n'
+            f'GAME {game_number}\n\n'
+            f'{format_team("blue", blue_team)}\n'
+            f'{format_team("red", red_team)}```'
+        )
+
         return confirm_message
+
     
     line_confirm_message = get_line_confirm_message()
 
@@ -314,7 +319,41 @@ async def choose_who_banpick(ctx, full_game_info, present_game, game_number, bar
             super().__init__(timeout=3600)
 
             # 바론 팀 선택 버튼
+            self.add_item(self.create_who_banpick_button('baron'))
             # 장로 팀 선택 버튼
+            self.add_item(self.create_who_banpick_button('elder'))
             # 이전으로 돌아가기(수정) 버튼
+            self.add_item(self.create_undo_button())
+
+
+        def create_who_banpick_button(self, team):
+            async def callback(interaction: discord.Interaction):
+                press_user = interaction.user
+                if press_user not in full_game_info[team]['members']:
+                    await interaction.response.defer()
+                    return
+                self.remove_item(button)
+                if len(self.children) == 1:
+                    await interaction.message.delete()
+                    # 밴픽 진행
+                await interaction.response.edit_message(view=self)
+
+            button = discord.ui.Button(label=f"{'바론' if team == 'baron' else '장로'}팀 밴픽 진행", style=discord.ButtonStyle.primary)
+            button.callback = callback
+            return button
+        
+        def create_undo_button(self):
+            async def callback(interaction: discord.Interaction):
+                press_user = interaction.user
+                if press_user not in full_game_info['summoners']:
+                    await interaction.response.defer()
+                    return
+                await interaction.message.delete()
+                # 3번으로 돌아가기
+                await choose_line(ctx, full_game_info, present_game, game_number)
+
+            button = discord.ui.Button(label=f"라인 선택 다시하기", style=discord.ButtonStyle.red)
+            button.callback = callback
+            return button
     
     await ctx.send(line_confirm_message)

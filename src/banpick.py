@@ -1,40 +1,7 @@
+import io
 import discord
-from banpick_class import Team, TeamPick
+from banpick_class import make_new_full_game_info, make_new_game_info
 from functions import *
-
-# 내전 전체 밴픽 Dict 생성
-def make_new_full_game_info(ctx):
-    full_game_info = {
-        "channel": ctx.channel.id, # 내전 진행중인 채널
-        "host": None, # 내전을 연 사람
-        "summoners": [], # 모든 소환사 목록
-        "baron": Team('baron', []).to_dict(), # 팀 바론 목록
-        "elder": Team('elder', []).to_dict(), # 팀 장로 목록
-        "leader": {"baron": None, "elder": None}, # 팀장
-        "games": [], # 각 내전 게임들 담은 list
-        "resume": True, # 밴픽 진행 여부
-        "game_id": None,
-    }
-    return full_game_info
-
-
-# 내전 게임 당 밴픽 Dict 생성
-def make_new_game_info(full_game_info):
-    game_info = {
-        "blue": None, # 'baron' or 'elder'
-        "red": None, # 'baron' or 'elder'
-        "baron_host": None, # baron 팀 밴픽 진행자
-        "elder_host": None, # elder 팀 밴픽 진행자
-        "baron_ban": [],
-        "elder_ban": [],
-        "pick_order": [], # 블루 1픽부터 레드 5픽까지 순서대로 나열
-        "baron_pick": TeamPick().to_dict(),
-        "elder_pick": TeamPick().to_dict(), 
-        "winner": None,
-        "loser": None,
-    }
-    return game_info
-
 
 # 밴픽 시작
 async def initiate_banpick(ctx, full_game_info):
@@ -333,9 +300,14 @@ async def choose_who_banpick(ctx, full_game_info, present_game, game_number, bar
                     await interaction.response.defer()
                     return
                 self.remove_item(button)
+                present_game[f'{team}_host'] = press_user 
+                confirmed_line = baron_line if team == 'baron' else elder_line
+                for (line, member) in confirmed_line.items():
+                    present_game[f'{team}_pick'][line]['summoner'] = member
                 if len(self.children) == 1:
                     await interaction.message.delete()
                     # 밴픽 진행
+                    await progress_banpick(ctx, full_game_info, present_game, game_number)
                 await interaction.response.edit_message(view=self)
 
             button = discord.ui.Button(label=f"{'바론' if team == 'baron' else '장로'}팀 밴픽 진행", style=discord.ButtonStyle.primary)
@@ -350,10 +322,24 @@ async def choose_who_banpick(ctx, full_game_info, present_game, game_number, bar
                     return
                 await interaction.message.delete()
                 # 3번으로 돌아가기
-                await choose_line(ctx, full_game_info, present_game, game_number)
+                await choose_line(ctx, full_game_info)
 
             button = discord.ui.Button(label=f"라인 선택 다시하기", style=discord.ButtonStyle.red)
             button.callback = callback
             return button
     
     await ctx.send(line_confirm_message)
+
+
+# 5. 밴픽 진행
+async def progress_banpick(ctx, full_game_info):
+    '''
+    game_number = len(full_game_info['games'])
+    present_game = full_game_info['games'][game_number]
+
+    baron_host = present_game['baron_host']
+    elder_host = present_game['elder_host']
+
+    '''
+
+    

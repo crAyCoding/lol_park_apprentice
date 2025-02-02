@@ -1,3 +1,37 @@
+# 내전 전체 밴픽 Dict 생성
+def make_new_full_game_info(ctx):
+    full_game_info = {
+        "channel": ctx.channel.id, # 내전 진행중인 채널
+        "host": None, # 내전을 연 사람
+        "summoners": [], # 모든 소환사 목록
+        "baron": Team('baron', []).to_dict(), # 팀 바론 목록
+        "elder": Team('elder', []).to_dict(), # 팀 장로 목록
+        "leader": {"baron": None, "elder": None}, # 팀장
+        "games": [], # 각 내전 게임들 담은 list
+        "resume": True, # 밴픽 진행 여부
+        "game_id": None,
+    }
+    return full_game_info
+
+
+# 내전 게임 당 밴픽 Dict 생성
+def make_new_game_info(full_game_info):
+    game_info = {
+        "blue": None, # 'baron' or 'elder'
+        "red": None, # 'baron' or 'elder'
+        "baron_host": None, # baron 팀 밴픽 진행자
+        "elder_host": None, # elder 팀 밴픽 진행자
+        "baron_ban": [],
+        "elder_ban": [],
+        "pick_order": [], # 블루 1픽부터 레드 5픽까지 순서대로 나열
+        "baron_pick": TeamPick().to_dict(),
+        "elder_pick": TeamPick().to_dict(), 
+        "winner": None,
+        "loser": None,
+    }
+    return game_info
+
+
 class Team:
     def __init__(self, name, members):
         self.name = name
@@ -32,11 +66,11 @@ class TeamPick:
     
     def to_dict(self):
         return {
-            "top": self.top,
-            "jungle": self.jungle,
-            "mid": self.mid,
-            "bot": self.bot,
-            "support": self.support
+            "탑": self.top,
+            "정글": self.jungle,
+            "미드": self.mid,
+            "원딜": self.bot,
+            "서폿": self.support
         }
         
 

@@ -1,7 +1,13 @@
 import io
 import discord
 from banpick_class import make_new_full_game_info, make_new_game_info
+from banpick_image import get_banpick_image
 from functions import *
+
+
+banpick_message = None
+banpick_turn = None
+
 
 # 밴픽 시작
 async def initiate_banpick(ctx, full_game_info):
@@ -24,7 +30,7 @@ async def generate_new_banpick(ctx, full_game_info: dict):
         if interaction.user != full_game_info["host"]:
             await interaction.response.send_message(
                 content='내전 연 사람만 누를 수 있습니다.',
-                ephemeral=True  # 이 옵션으로 메시지를 요청한 사용자에게만 보이게 설정
+                ephemeral=True 
             )
             return
         full_game_info["resume"] = True if interaction.data['custom_id'] == 'generate' else False
@@ -36,7 +42,7 @@ async def generate_new_banpick(ctx, full_game_info: dict):
         if interaction.user != full_game_info["host"]:
             await interaction.response.send_message(
                 content='내전 연 사람만 누를 수 있습니다.',
-                ephemeral=True  # 이 옵션으로 메시지를 요청한 사용자에게만 보이게 설정
+                ephemeral=True 
             )
             return
         result = True if interaction.data['custom_id'] == 'yes' else False
@@ -46,9 +52,13 @@ async def generate_new_banpick(ctx, full_game_info: dict):
                 # 밴픽 새로이 진행 
                 full_game_info["games"].append(make_new_game_info(full_game_info))
                 await choose_blue_red(ctx, full_game_info)
+
+                # 테스트용
+                print(f'1번 단계 종료\n=======================\n{full_game_info}\n=======================')
             else:
                 # 기록지 출력
-                print('hi')
+                await interaction.message.delete()
+                await ctx.send(f'밴픽이 종료되었습니다.')
         else:
             await ctx.send(content=f"## 버튼을 선택해주세요.", view=generate_banpick_view)
     
@@ -126,6 +136,9 @@ async def choose_blue_red(ctx, full_game_info: dict):
             present_game[other_team] = "baron" if choose_team == "elder" else "elder"
             await interaction.channel.send(f'{get_nickname(leader)}님께서 {team}를 선택하셨습니다.')
             await choose_line(ctx, full_game_info, present_game, game_number)
+
+            # 테스트용
+            print(f'2번 단계 종료\n=======================\n{full_game_info}\n=======================')
         return button_callback
 
     # 블루팀 버튼 추가
@@ -155,18 +168,25 @@ async def choose_line(ctx, full_game_info: dict, present_game: dict, game_number
     # 첫번째 게임이 아닌지 여부
     is_not_first_game = True if game_number > 1 else False
 
-    baron_line = []
-    elder_line = []
+    blue_line = []
+    red_line = []
     positions = ["top", "jungle", "mid", "bot", "support"]
 
     if is_not_first_game:
         prev_game = full_game_info["games"][game_number - 2]
-        # baron_line과 elder_line에 데이터를 추가
-        baron_line.extend([prev_game["baron_pick"][pos]["summoner"] for pos in positions])
-        elder_line.extend([prev_game["elder_pick"][pos]["summoner"] for pos in positions])
+        if prev_game['blue'] == present_game['blue']:
+            blue_line.extend([prev_game["blue_pick"][pos]["summoner"] for pos in positions])
+            red_line.extend([prev_game["red_pick"][pos]["summoner"] for pos in positions])
+        else:
+            blue_line.extend([prev_game["red_pick"][pos]["summoner"] for pos in positions])
+            red_line.extend([prev_game["blue_pick"][pos]["summoner"] for pos in positions])
     else:
-        baron_line = full_game_info["baron"]["members"]
-        elder_line = full_game_info["elder"]["members"]
+        if present_game['blue'] == 'baron':
+            blue_line = full_game_info["baron"]["members"]
+            red_line = full_game_info["elder"]["members"]
+        else:
+            blue_line = full_game_info["elder"]["members"]
+            red_line = full_game_info["baron"]["members"]
 
     class LineChooseView(discord.ui.View):
         def __init__(self, line_members, team):
@@ -182,34 +202,32 @@ async def choose_line(ctx, full_game_info: dict, present_game: dict, game_number
         def create_select(self, line, member, team):
             async def callback(interaction: discord.Interaction):
                 press_user = interaction.user
-                if press_user not in full_game_info[team]['members']:
+                if press_user not in self.line_members:
                     await interaction.response.edit_message(view=self)
+                    await interaction.followup.send(
+                        f"{'블루' if team == 'blue' else '레드'}팀만 변경이 가능합니다.",
+                        ephemeral=True
+                    )
                     return
+                prev_value = self.answers[line]
                 selected_value = interaction.data["values"][0]
-                # 임시로 custom_id 초기화 (중복 방지)
-                prev_custom_id = select.custom_id
-                select.custom_id = '' 
                 # 다른 Select 옵션 및 placeholder 업데이트
                 for child in self.children:
                     if isinstance(child, discord.ui.Select) and child != select:
                         child_line = child.placeholder.split(":")[0].strip()
-                        if child.custom_id == selected_value:
-                            child.custom_id = prev_custom_id
+                        child_member_nickname = child.placeholder.split(":")[1].strip()
+                        if child.placeholder == selected_value:
                             for origin_line in self.answers.keys():
                                 if origin_line == child_line:
-                                    self.answers[child_line] = prev_custom_id
-                        child.placeholder = f'{child_line} : {child.custom_id}'
-                        child.options=[discord.SelectOption(label=line_member.display_name) for line_member in self.line_members if line_member != child.custom_id]
+                                    self.answers[child_line] = prev_value
                 self.answers[line] = selected_value
-                select.custom_id = selected_value
                 select.placeholder = f"{line} : {selected_value}"
                 select.options = [discord.SelectOption(label=line_member.display_name) for line_member in self.line_members if line_member != selected_value]
                 await interaction.response.edit_message(view=self)
 
             select = discord.ui.Select(
-                custom_id=member.display_name,
-                placeholder=f"{line} : {member.display_name}",
-                options=[discord.SelectOption(label=line_member.display_name) for line_member in self.line_members if line_member != member],
+                placeholder=f"{line} : {get_nickname(member)}",
+                options=[discord.SelectOption(label=line_member.display_name) for line_member in self.line_members],
                 min_values=1,
                 max_values=1
             )
@@ -217,63 +235,68 @@ async def choose_line(ctx, full_game_info: dict, present_game: dict, game_number
             return select
         
     class ConfirmView(discord.ui.View):
-        def __init__(self, baron_answers, elder_answers, baron_message, elder_message):
+        def __init__(self, blue_answers, red_answers, blue_message, red_message, blue_members, red_members):
             super().__init__(timeout=3600)
-            self.baron = baron_answers
-            self.elder = elder_answers
-            self.baron_message = baron_message
-            self.elder_message = elder_message
+            self.blue = blue_answers
+            self.red = red_answers
+            self.blue_message = blue_message
+            self.red_message = red_message
 
-            self.add_item(self.create_confirm_button('baron'))
-            self.add_item(self.create_confirm_button('elder'))
+            self.add_item(self.create_confirm_button('blue', blue_members, red_members))
+            self.add_item(self.create_confirm_button('red', blue_members, red_members))
         
-        def create_confirm_button(self, team):
+        def create_confirm_button(self, team, blue_members, red_members):
             async def callback(interaction: discord.Interaction):
                 press_user = interaction.user
-                if press_user not in full_game_info[team]['members']:
+                line_members = blue_members if team == 'blue' else red_members
+                if press_user not in line_members:
                     await interaction.response.defer()
+                    await interaction.followup.send(
+                        f"{'블루' if team == 'blue' else '레드'}팀 사람만 누를 수 있습니다.",
+                        ephemeral=True
+                    )
                     return 
-                if team == 'baron':
-                    await self.baron_message.delete()
+                if team == 'blue':
+                    await self.blue_message.delete()
                 else:
-                    await self.elder_message.delete()
+                    await self.red_message.delete()
                 self.remove_item(button)
                 if len(self.children) == 0:
                     await interaction.message.delete()
-                    await choose_who_banpick(ctx, full_game_info, present_game, game_number, self.baron, self.elder)
+                    await choose_who_banpick(ctx, full_game_info, present_game, game_number, self.blue, self.red)
+
+                    # 테스트용
+                    print(f'3번 단계 종료\n=======================\n{full_game_info}\n=======================')
                 await interaction.response.edit_message(view=self)
 
-            button = discord.ui.Button(label=f"{'바론' if team == 'baron' else '장로'}팀 확정", style=discord.ButtonStyle.success)
+            button_style = discord.ButtonStyle.success if team == 'blue' else discord.ButtonStyle.red
+            button = discord.ui.Button(label=f"{'블루' if team == 'blue' else '레드'}팀 확정", style=button_style)
             button.callback = callback
             return button
         
-    baron_view = LineChooseView(baron_line, 'baron')
-    elder_view = LineChooseView(elder_line, 'elder')
-    baron_message = await ctx.send("## 바론팀 라인을 골라주세요.", view=baron_view)
-    elder_message = await ctx.send("## 장로팀 라인을 골라주세요.", view=elder_view)
+    blue_view = LineChooseView(blue_line)
+    red_view = LineChooseView(red_line)
+    baron_message = await ctx.send("## 블루팀 라인을 골라주세요.", view=blue_view)
+    elder_message = await ctx.send("## 레드팀 라인을 골라주세요.", view=red_view)
 
     # 결과 확인 버튼을 별도의 View로 추가
-    confirm_view = ConfirmView(baron_view.answers, elder_view.answers, baron_message, elder_message)
+    confirm_view = ConfirmView(blue_view.answers, red_view.answers, baron_message, elder_message, blue_line, red_line)
     await ctx.send("확정 버튼을 눌러 선택을 완료하세요:", view=confirm_view)
 
 
 # 4. 밴픽 진행할 인원 선정
-async def choose_who_banpick(ctx, full_game_info, present_game, game_number, baron_line, elder_line):
+async def choose_who_banpick(ctx, full_game_info, present_game, game_number, blue_line, red_line):
     def get_line_confirm_message():
         def format_team(team_name, team_data):
-            team_header = f'🟦 블루팀 (팀 {"바론" if present_game[team_name] == "baron" else "장로"})' if team_name == "blue" else \
-                        f'🟥 레드팀 (팀 {"바론" if present_game[team_name] == "baron" else "장로"})'
+            team_header = f'🟦 블루팀' if team_name == "blue" else f'🟥 레드팀'
             team_lines = '\n'.join([f'{line} : {member}' for line, member in team_data.items()])
             return f'{team_header}\n\n{team_lines}\n'
-
-        blue_team = baron_line if present_game["blue"] == 'baron' else elder_line
-        red_team = baron_line if present_game["red"] == 'baron' else elder_line
 
         confirm_message = (
             f'```\n'
             f'GAME {game_number}\n\n'
-            f'{format_team("blue", blue_team)}\n'
-            f'{format_team("red", red_team)}```'
+            f'{format_team("blue", blue_line)}\n'
+            f'{format_team("red", red_line)}```'
         )
 
         return confirm_message
@@ -286,9 +309,9 @@ async def choose_who_banpick(ctx, full_game_info, present_game, game_number, bar
             super().__init__(timeout=3600)
 
             # 바론 팀 선택 버튼
-            self.add_item(self.create_who_banpick_button('baron'))
+            self.add_item(self.create_who_banpick_button('blue'))
             # 장로 팀 선택 버튼
-            self.add_item(self.create_who_banpick_button('elder'))
+            self.add_item(self.create_who_banpick_button('red'))
             # 이전으로 돌아가기(수정) 버튼
             self.add_item(self.create_undo_button())
 
@@ -296,21 +319,30 @@ async def choose_who_banpick(ctx, full_game_info, present_game, game_number, bar
         def create_who_banpick_button(self, team):
             async def callback(interaction: discord.Interaction):
                 press_user = interaction.user
-                if press_user not in full_game_info[team]['members']:
+                team_type = present_game[team]
+                if press_user not in full_game_info[team_type]['members']:
                     await interaction.response.defer()
+                    await interaction.followup.send(
+                        f"{'블루' if team == 'blue' else '레드'}팀 사람만 누를 수 있습니다.",
+                        ephemeral=True
+                    )
                     return
                 self.remove_item(button)
                 present_game[f'{team}_host'] = press_user 
-                confirmed_line = baron_line if team == 'baron' else elder_line
+                confirmed_line = blue_line if team == 'blue' else red_line
                 for (line, member) in confirmed_line.items():
                     present_game[f'{team}_pick'][line]['summoner'] = member
                 if len(self.children) == 1:
                     await interaction.message.delete()
                     # 밴픽 진행
                     await progress_banpick(ctx, full_game_info, present_game, game_number)
+
+                    # 테스트용
+                    print(f'4번 단계 종료\n=======================\n{full_game_info}\n=======================')
+                    return
                 await interaction.response.edit_message(view=self)
 
-            button = discord.ui.Button(label=f"{'바론' if team == 'baron' else '장로'}팀 밴픽 진행", style=discord.ButtonStyle.primary)
+            button = discord.ui.Button(label=f"{'블루' if team == 'blue' else '레드'}팀 밴픽 진행", style=discord.ButtonStyle.primary)
             button.callback = callback
             return button
         
@@ -319,27 +351,79 @@ async def choose_who_banpick(ctx, full_game_info, present_game, game_number, bar
                 press_user = interaction.user
                 if press_user not in full_game_info['summoners']:
                     await interaction.response.defer()
+                    await interaction.followup.send(
+                        f'내전에 참여하는 사람만 누를 수 있습니다.',
+                        ephemeral=True
+                    )
                     return
                 await interaction.message.delete()
                 # 3번으로 돌아가기
-                await choose_line(ctx, full_game_info)
+                await choose_line(ctx, full_game_info, present_game, game_number)
 
             button = discord.ui.Button(label=f"라인 선택 다시하기", style=discord.ButtonStyle.red)
             button.callback = callback
             return button
     
-    await ctx.send(line_confirm_message)
+    who_banpick_view = WhoBanpickView()
+    await ctx.send(content=line_confirm_message, view=who_banpick_view)
 
 
 # 5. 밴픽 진행
-async def progress_banpick(ctx, full_game_info):
-    '''
-    game_number = len(full_game_info['games'])
-    present_game = full_game_info['games'][game_number]
+async def progress_banpick(ctx, full_game_info, present_game, game_number):
+    global banpick_message, banpick_turn
 
-    baron_host = present_game['baron_host']
-    elder_host = present_game['elder_host']
+    blue_host = present_game['blue_host']
+    red_host = present_game['red_host']
 
-    '''
+    # 밴픽 순서
+    banpick_turn = 1
+    # 1,3,5,7,10,11,14,16,18,19 블루 숫자
+    # 2,4,6,8,9,12,13,15,17,20 레드 숫자
+    blue_turn_numbers = [1, 3, 5, 7, 10, 11, 14, 16, 18, 19]
+    red_turn_numbers = [2, 4, 6, 8, 9, 12, 13, 15, 17, 20]
+
+    while banpick_turn < 20:
+        
+        print(banpick_turn)
+
+        banpick_image = get_banpick_image(full_game_info, present_game, game_number)
+
+        # 이미지를 메모리 내에서 처리
+        buffer = io.BytesIO()
+        banpick_image.save(buffer, format='PNG')
+        buffer.seek(0)  # 스트림의 시작 위치로 이동
+
+        if banpick_message:
+            await banpick_message.delete()  # 기존 메시지 삭제
+
+        # Discord에 메모리 파일로 전송
+        banpick_message = await ctx.send(file=discord.File(buffer, filename="example.png"))
+        
+        now_host = blue_host if banpick_turn in blue_turn_numbers else red_host
+
+        print(now_host.display_name)
+
+        def check_banpick(message):
+            
+            if message.author != now_host or message.channel != ctx.channel:
+                return False
+
+            # 유찰 또는 종료 조건
+            if message.content in ['아트록스']:
+                return True
+            
+            return False
+
+        host_message = await ctx.bot.wait_for('message', check=check_banpick)
+        champion = 'aatrox'
+
+        if banpick_turn == 1:
+            present_game["blue_ban"][0] = champion
+        
+        banpick_turn = banpick_turn + 1
+
+ 
+
+
 
     

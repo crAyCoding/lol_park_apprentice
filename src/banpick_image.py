@@ -1,70 +1,122 @@
-from PIL import Image, ImageFont, ImageDraw, ImageOps
+from PIL import Image, ImageFont, ImageDraw, ImageOps, ImageFont
+from functions import get_nickname
 
-def get_title_image(blue_team_members, red_team_members, blue_leader, red_leader, blue_win, red_win, game_number):
-    # 이미지 생성
-    title_image = Image.new('RGB', (1920, 700), 'pink')
+w = 1920
+h = 1080
+
+title_x_padding = 50
+title_y_padding = 20
+
+ban_x = 100
+ban_y = 100
+pick_x = 155
+pick_y = 280
+
+
+def get_banpick_image(full_game_info, present_game, game_number):
+
+    banpick_image = Image.new('RGB', (w, h), 'pink')
+
+    blue_team = present_game['blue']
+    red_team = present_game['red']
+
+    blue_members = full_game_info[blue_team]['members']
+    red_members = full_game_info[red_team]['members']
+
+    blue_banpick_host = present_game['blue_host']
+    red_banpick_host = present_game['red_host']
+    blue_win = full_game_info['blue_win']
+    red_win = full_game_info['red_win']
+
+    blue_ban = present_game['blue_ban']
+    red_ban = present_game['red_ban']
+
+    blue_pick = present_game['blue_pick']['picked']
+    red_pick = present_game['red_pick']['picked']
+
+    banpick_image.paste(get_background_image(present_game, blue_banpick_host, red_banpick_host, blue_win, red_win, game_number))
+
+    # 밴 합치기
+    banpick_image.paste(get_banned_images(blue_ban), (0, h - pick_y - ban_y))
+    banpick_image.paste(get_banned_images(red_ban), (w - ban_x * 5, h - pick_y - ban_y))
+
+    # 픽 합치기
+    banpick_image.paste(get_picked_images(blue_pick), (0, h - pick_y)) 
+    banpick_image.paste(get_picked_images(red_pick), (w - pick_x * 5, h - pick_y))
+
+    return banpick_image
+
+
+def draw_team(draw, team_name, present_game, leader, align="left", font=None):
+
+    team_x_pos = title_x_padding if team_name == "블루팀" else w - draw.textlength("레드팀", font=font["team"]) - title_x_padding
+    leader_x_pos = title_x_padding
+    line_names = ["탑", "정글", "미드", "원딜", "서폿"]
+    
+    for i, line in enumerate(line_names):
+        nickname = present_game[f'{"blue" if team_name == "블루팀" else "red"}_pick'][line]['summoner'].split('/')[0].strip()
+        text = f"{line_names[i]} : {nickname[:20]}" if align == "left" else f"{nickname[:20]} : {line_names[i]}"
+        color = "purple" if nickname == get_nickname(leader) else "white"
+
+        if align == "right":
+            leader_x_pos = w - draw.textlength(text, font=font["leader"]) - title_x_padding
+        
+        draw.text((leader_x_pos, title_y_padding + 220 + (i * 80)), text, fill=color, font=font["leader"])
+
+    draw.text((team_x_pos, title_y_padding), team_name, fill="blue" if team_name == "블루팀" else "red", font=font["team"])
+
+
+def get_background_image(present_game, blue_banpick_host, red_banpick_host, blue_win, red_win, game_number):
+
+    title_image = Image.new('RGB', (w, h), 'pink')
     draw = ImageDraw.Draw(title_image)
 
-    font_path = "assets/fonts/CookieRun.ttf"  # 시스템에 설치된 폰트 파일 경로
-    team_font = ImageFont.truetype(font_path, 80) 
-    leader_font = ImageFont.truetype(font_path, 45)
+    font_path = "assets/fonts/CookieRun.ttf"
+    font = {
+        "team": ImageFont.truetype(font_path, 80),
+        "leader": ImageFont.truetype(font_path, 45),
+        "score": ImageFont.truetype(font_path, 120),
+        "game": ImageFont.truetype(font_path, 40),
+        "director": ImageFont.truetype(font_path, 40)
+    }
 
-    draw.line((0, 200, 1920, 203), fill="black", width=1)
+    # 구분선
+    draw.line((0, 200, w, 203), fill="black", width=1)
 
-    # 블루팀 텍스트 정렬 (좌측에서 50px)
-    draw.text((50, 20), "블루팀", fill='blue', font=team_font)
-    draw.text((50, 210), f"   탑 : {blue_team_members[0][:20]}", fill=f"{'purple' if blue_team_members[0] == blue_leader else 'white'}", font=leader_font)
-    draw.text((50, 290), f"정글 : {blue_team_members[1][:20]}", fill=f"{'purple' if blue_team_members[1] == blue_leader else 'white'}", font=leader_font)
-    draw.text((50, 370), f"미드 : {blue_team_members[2][:20]}", fill=f"{'purple' if blue_team_members[2] == blue_leader else 'white'}", font=leader_font)
-    draw.text((50, 450), f"원딜 : {blue_team_members[3][:20]}", fill=f"{'purple' if blue_team_members[3] == blue_leader else 'white'}", font=leader_font)
-    draw.text((50, 530), f"서폿 : {blue_team_members[4][:20]}", fill=f"{'purple' if blue_team_members[4] == blue_leader else 'white'}", font=leader_font)
+    # 블루팀 & 레드팀 정보 표시
 
-    # 레드팀 텍스트 우측 기준 정렬 (50px 떨어지게)
-    image_width = title_image.width
+    draw_team(draw, "블루팀", present_game, blue_banpick_host, align="left", font=font)
+    draw_team(draw, "레드팀", present_game, red_banpick_host, align="right", font=font)
 
-    text_width = draw.textlength('레드팀', font=team_font)
-    red_team_x = image_width - text_width - 50
-    draw.text((red_team_x, 20), "레드팀", fill="red", font=team_font)
-
-    red_member_1 = image_width - draw.textlength(f"{red_team_members[0][:20]} :    탑", font=leader_font) - 50
-    red_member_2 = image_width - draw.textlength(f"{red_team_members[1][:20]} : 정글", font=leader_font) - 50
-    red_member_3 = image_width - draw.textlength(f"{red_team_members[2][:20]} : 미드", font=leader_font) - 50
-    red_member_4 = image_width - draw.textlength(f"{red_team_members[3][:20]} : 원딜", font=leader_font) - 50
-    red_member_5 = image_width - draw.textlength(f"{red_team_members[4][:20]} : 서폿", font=leader_font) - 50
-    draw.text((red_member_1, 210), f"{red_team_members[0][:20]} :    탑", fill=f"{'purple' if red_team_members[0] == red_leader else 'white'}", font=leader_font)
-    draw.text((red_member_2, 290), f"{red_team_members[1][:20]} : 정글", fill=f"{'purple' if red_team_members[1] == red_leader else 'white'}", font=leader_font)
-    draw.text((red_member_3, 370), f"{red_team_members[2][:20]} : 미드", fill=f"{'purple' if red_team_members[2] == red_leader else 'white'}", font=leader_font)
-    draw.text((red_member_4, 450), f"{red_team_members[3][:20]} : 원딜", fill=f"{'purple' if red_team_members[3] == red_leader else 'white'}", font=leader_font)
-    draw.text((red_member_5, 530), f"{red_team_members[4][:20]} : 서폿", fill=f"{'purple' if red_team_members[4] == red_leader else 'white'}", font=leader_font)
-
-    # 점수 표시 (현 스코어)
-    score_font = ImageFont.truetype(font_path, 120)
+    # 점수 표시
     score_text = f'{blue_win}   :   {red_win}'
-    score_text_width = draw.textlength(score_text, font=score_font)
-    score_text_x = (image_width - score_text_width) / 2
-
-    draw.text((score_text_x, 30), score_text, fill='black', font=score_font)
+    score_x = (w - draw.textlength(score_text, font=font["score"])) / 2
+    draw.text((score_x, 30), score_text, fill='black', font=font["score"])
 
     # 게임 번호 표시
-    game_number_font = ImageFont.truetype(font_path, 40)
-    game_text_width = draw.textlength(f'GAME {game_number}', font=game_number_font)
-    game_text_x = (image_width - game_text_width) / 2
-    draw.text((game_text_x, 0), f'GAME {game_number}', fill="black", font=game_number_font)
+    game_text = f'GAME {game_number}'
+    game_x = (w - draw.textlength(game_text, font=font["game"])) / 2
+    draw.text((game_x, 0), game_text, fill="black", font=font["game"])
+
+    # 제작자 표시
+    draw.text(((w - draw.textlength("made by", font=font["director"])) / 2, h - 130), "made by", fill='skyblue', font=font["director"])
+    draw.text(((w - draw.textlength("마술사의 수습생", font=font["director"])) / 2, h - 80), "마술사의 수습생", fill='skyblue', font=font["director"])
 
     return title_image
 
 
-def get_banned_image(champion_name=None):
+
+def get_personal_banned_image(champion_name=None):
 
     if champion_name:
-        ban_image = Image.open(f'assets/lol_champions_square/{champion_name}.png').convert("L").resize((100, 100), Image.LANCZOS)
+        ban_image = Image.open(f'assets/lol_champions_square/{champion_name}.png').convert("L").resize((ban_x, ban_y), Image.LANCZOS)
     else:
-        ban_image = Image.new('RGB', (100, 100), 'black')
+        ban_image = Image.new('RGB', (ban_x, ban_y), 'black')
 
     width, height = ban_image.size
     draw = ImageDraw.Draw(ban_image)
 
-    # 🔹 대각선 추가 (왼쪽 하단 → 오른쪽 상단)
+    # 대각선 추가 (왼쪽 하단 → 오른쪽 상단)
     draw.line((0, height, width, 0), fill="black", width=10)
 
     ban_image = ImageOps.expand(ban_image, border=1, fill='white')
@@ -72,14 +124,34 @@ def get_banned_image(champion_name=None):
     return ban_image
 
 
-def get_picked_image(champion_name=None):
+def get_personal_picked_image(champion_name=None):
 
     if champion_name:
-        pick_image = Image.open(f'assets/lol_champions_loading/{champion_name}.jpg').resize((155, 280), Image.LANCZOS)
+        pick_image = Image.open(f'assets/lol_champions_loading/{champion_name}.jpg').resize((pick_x, pick_y), Image.LANCZOS)
     else:
-        pick_image = Image.new('RGB', (155, 280), 'black')
+        pick_image = Image.new('RGB', (pick_x, pick_y), 'black')
 
     pick_image = ImageOps.expand(pick_image, border=1, fill='white')
 
     return pick_image
 
+
+def get_banned_images(banned_list):
+    banned_images = Image.new('RGB', (ban_x * 5, ban_y))
+    
+    for index, champion_name in enumerate(banned_list):
+        ban_image = get_personal_banned_image(champion_name)
+        banned_images.paste(ban_image, (ban_image.width * index, 0))
+
+    return banned_images
+
+
+def get_picked_images(picked_list):
+
+    picked_images = Image.new('RGB', (pick_x * 5, pick_y))
+    
+    for index, champion_name in enumerate(picked_list):
+        pick_image = get_personal_picked_image(champion_name)
+        picked_images.paste(pick_image, (pick_image.width * index, 0))
+
+    return picked_images
